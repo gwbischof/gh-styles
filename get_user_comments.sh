@@ -44,12 +44,13 @@ query($username: String!, $cursor: String) {
             owner {
               login
             }
+            isPrivate
           }
         }
       }
     }
   }
-}' -f username="$USERNAME" --paginate --jq '.data.user.issueComments.nodes[] | {
+}' -f username="$USERNAME" --paginate --jq '.data.user.issueComments.nodes[] | select(.issue.repository.isPrivate == false) | {
   comment_id: .id,
   created_at: .createdAt,
   url: .url,
