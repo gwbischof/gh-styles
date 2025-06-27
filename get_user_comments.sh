@@ -1,15 +1,44 @@
 #!/bin/bash
 
-if [ $# -eq 0 ]; then
-    echo "Usage: $0 <username>"
+INCLUDE_PRIVATE=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --include-private)
+            INCLUDE_PRIVATE=true
+            shift
+            ;;
+        -*)
+            echo "Unknown option $1"
+            echo "Usage: $0 <username> [--include-private]"
+            echo "  --include-private  Include comments from private repositories"
+            echo "Example: $0 octocat"
+            echo "Example: $0 octocat --include-private"
+            exit 1
+            ;;
+        *)
+            USERNAME="$1"
+            shift
+            ;;
+    esac
+done
+
+if [ -z "$USERNAME" ]; then
+    echo "Usage: $0 <username> [--include-private]"
+    echo "  --include-private  Include comments from private repositories"
     echo "Example: $0 octocat"
+    echo "Example: $0 octocat --include-private"
     exit 1
 fi
 
-USERNAME="$1"
 OUTPUT_FILE="${USERNAME}_comments.json"
 
 echo "Fetching all comments for user: $USERNAME"
+if [ "$INCLUDE_PRIVATE" = true ]; then
+    echo "Including comments from private repositories"
+else
+    echo "Only including comments from public repositories"
+fi
 echo "Output will be saved to: $OUTPUT_FILE"
 echo "========================================="
 
@@ -50,7 +79,7 @@ query($username: String!, $cursor: String) {
       }
     }
   }
-}' -f username="$USERNAME" --paginate --jq '.data.user.issueComments.nodes[] | select(.issue.repository.isPrivate == false) | {
+}' -f username="$USERNAME" --paginate --jq '.data.user.issueComments.nodes[] | '"$(if [ "$INCLUDE_PRIVATE" = true ]; then echo ""; else echo "select(.issue.repository.isPrivate == false) | "; fi)"'{
   comment_id: .id,
   created_at: .createdAt,
   url: .url,
