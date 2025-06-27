@@ -1,0 +1,34 @@
+[project]
+name = "styles"
+version = "0.1.0"
+description = "GitHub comment style analysis using Claude"
+authors = ["gwbischof"]
+channels = ["conda-forge"]
+platforms = ["osx-64", "osx-arm64", "linux-64", "win-64"]
+
+[dependencies]
+python = ">=3.8"
+
+[tasks]
+generate = "python generate_style_document.py"
+generate-small = "python generate_style_document.py --batch-size 10 --max-lines 1000"
+resume = "python generate_style_document.py"
+clean = "rm -f progress.json gwbischof_style_document.md"
+status = "python -c \"import json; print('Progress:', json.load(open('progress.json'))['current_line'], 'lines processed') if __import__('os').path.exists('progress.json') else print('No progress file found')\""
+test-claude = "echo 'Hello, please respond with just the word TEST' | claude"
+
+[tasks.help]
+cmd = """
+echo "Available tasks:"
+echo "  pixi run generate       - Generate style document from all comments"
+echo "  pixi run generate-small - Generate with smaller batches (for testing)"
+echo "  pixi run resume         - Resume from last stopping point"
+echo "  pixi run clean          - Clean progress and output files"
+echo "  pixi run status         - Show current progress"
+echo ""
+echo "Options for generate:"
+echo "  --comments PATH         - Path to comments file (default: gwbischof_comments.json)"
+echo "  --output PATH           - Output file path (default: gwbischof_style_document.md)"
+echo "  --batch-size N          - Comments per batch (default: 50)"
+echo "  --max-lines N           - Max lines before compaction (default: 5000)"
+"""
