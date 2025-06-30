@@ -11,7 +11,7 @@ python = ">=3.8"
 
 [tasks]
 generate = "python generate_style_document.py"
-generate-small = "python generate_style_document.py --batch-size 10 --max-lines 1000"
+generate-small = "python generate_style_document.py --batch-size 50 --max-lines 1000"
 resume = "python generate_style_document.py"
 clean = "rm -f progress.json gwbischof_style_document.md"
 status = "python -c \"import json; print('Progress:', json.load(open('progress.json'))['current_line'], 'lines processed') if __import__('os').path.exists('progress.json') else print('No progress file found')\""

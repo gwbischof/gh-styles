@@ -15,7 +15,7 @@ import argparse
 
 class StyleDocumentGenerator:
     def __init__(self, comments_file: str, output_file: str = "gwbischof_style_document.md", 
-                 progress_file: str = "progress.json", batch_size: int = 50, max_lines: int = 5000):
+                 progress_file: str = "progress.json", batch_size: int = 250, max_lines: int = 5000):
         self.comments_file = comments_file
         self.output_file = output_file
         self.progress_file = progress_file
@@ -86,12 +86,23 @@ class StyleDocumentGenerator:
         """Call Claude Code with the given prompt using stdin."""
         print(f"Calling Claude with {len(prompt)} character prompt...")
         try:
+            # Create a full prompt with system instructions
+            full_prompt = f"""<system>
+You are a document processing assistant. Your role is to process text content and return the requested output directly without any meta-commentary, explanations, or requests for permissions. 
+
+When asked to update or merge documents, return only the final document content. Do not include phrases like "I need permissions", "Would you like me to", or any conversational responses.
+
+You are running in an automated script that expects only the processed content as output.
+</system>
+
+{prompt}"""
+            
             cmd = ['claude']
             process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, 
                                      stderr=subprocess.PIPE, text=True)
             
             print("Sending prompt to Claude...")
-            stdout, stderr = process.communicate(input=prompt, timeout=timeout)
+            stdout, stderr = process.communicate(input=full_prompt, timeout=timeout)
             
             if process.returncode == 0:
                 result = stdout.strip()
@@ -138,6 +149,33 @@ Comments to analyze:
 Provide specific, actionable style guidelines based on these examples."""
         
         return self.call_claude(prompt)
+    
+    def update_style_document(self, new_analysis: str) -> Optional[str]:
+        """Update the existing style document with new analysis, creating a completely new improved version."""
+        if not self.style_content:
+            return new_analysis
+            
+        prompt = f"""You are a content processor updating a GitHub comment style guide. You must output the complete updated document content directly.
+
+TASK: Return the complete updated style document content (just the content, no explanations or permission requests).
+
+REQUIREMENTS:
+1. Make the document MORE DETAILED than the existing one
+2. PRESERVE all existing insights, examples, and specific details
+3. ADD new insights from the new analysis to expand sections
+4. EXPAND existing points with additional examples and specifics
+5. The document should GROW in detail and comprehensiveness, never shrink
+6. Do NOT remove or simplify existing content - only enhance and expand it
+
+EXISTING STYLE DOCUMENT:
+{self.style_content}
+
+NEW ANALYSIS TO INTEGRATE:
+{new_analysis}
+
+OUTPUT ONLY the complete updated style document content (no meta-commentary, no permission requests, just the document content)."""
+        
+        return self.call_claude(prompt, timeout=120)
     
     def count_lines(self, text: str) -> int:
         """Count lines in text."""
@@ -211,17 +249,34 @@ Compactions performed: {self.compaction_count}
                 
                 analysis = self.analyze_comment_batch(batch)
                 if analysis:
+                    print(f"Got analysis: {len(analysis)} characters")
                     if self.style_content:
-                        self.style_content += "\n\n" + analysis
+                        print("Updating existing style document...")
+                        original_length = len(self.style_content)
+                        updated_content = self.update_style_document(analysis)
+                        if updated_content and len(updated_content.strip()) > 0:
+                            new_length = len(updated_content)
+                            if new_length >= original_length * 0.9:  # Allow slight compression but not major shrinking
+                                print(f"Update successful: {original_length} -> {new_length} characters")
+                                self.style_content = updated_content
+                            else:
+                                print(f"Update made document too small ({original_length} -> {new_length}), appending instead...")
+                                self.style_content += "\n\n" + analysis
+                        else:
+                            print(f"Update failed. Response: '{updated_content}'. Appending instead...")
+                            self.style_content += "\n\n" + analysis
                     else:
+                        print("First batch - setting initial content")
                         self.style_content = analysis
-                    
-                    current_line_count = self.count_lines(self.style_content)
-                    print(f"Style document now has {current_line_count} lines")
-                    
-                    if current_line_count > self.max_lines:
-                        if not self.compact_style_document():
-                            print("Failed to compact. Continuing anyway...")
+                else:
+                    print("No analysis returned from batch processing")
+                
+                current_line_count = self.count_lines(self.style_content)
+                print(f"Style document now has {current_line_count} lines")
+                
+                if current_line_count > self.max_lines:
+                    if not self.compact_style_document():
+                        print("Failed to compact. Continuing anyway...")
                 
                 self.current_line += len(batch)
                 self.save_progress()
@@ -250,7 +305,7 @@ def main():
                         help='Path to comments JSON file')
     parser.add_argument('--output', default='gwbischof_style_document.md',
                         help='Output style document file')
-    parser.add_argument('--batch-size', type=int, default=50,
+    parser.add_argument('--batch-size', type=int, default=250,
                         help='Number of comments to process per batch')
     parser.add_argument('--max-lines', type=int, default=5000,
                         help='Maximum lines before compaction')

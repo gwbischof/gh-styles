@@ -45,8 +45,9 @@ echo "========================================="
 echo "Starting API request..."
 echo "Fetching comments (this may take a while for users with many comments)..."
 
-# Create a temp file to show progress
-TEMP_FILE=$(mktemp)
+# Initialize output file
+> "$OUTPUT_FILE"
+
 gh api graphql -f query='
 query($username: String!, $cursor: String) {
   user(login: $username) {
@@ -90,21 +91,21 @@ query($username: String!, $cursor: String) {
   issue_state: .issue.state,
   issue_author: .issue.author.login,
   comment_body: .body
-}' > "$TEMP_FILE" 2>&1 &
+}' >> "$OUTPUT_FILE" 2>&1 &
 
 # Show progress while the request is running
 PID=$!
 echo "Request started (PID: $PID)..."
 while kill -0 $PID 2>/dev/null; do
-    if [ -f "$TEMP_FILE" ]; then
-        CURRENT_COUNT=$(wc -l < "$TEMP_FILE" 2>/dev/null | tr -d ' ')
+    if [ -f "$OUTPUT_FILE" ]; then
+        CURRENT_COUNT=$(wc -l < "$OUTPUT_FILE" 2>/dev/null | tr -d ' ')
         echo "Progress: $CURRENT_COUNT comments fetched so far..."
     fi
     sleep 5
 done
 
-# Move temp file to final output
-mv "$TEMP_FILE" "$OUTPUT_FILE"
+# Wait for the process to complete
+wait $PID
 
 if [ $? -eq 0 ]; then
     COMMENT_COUNT=$(wc -l < "$OUTPUT_FILE" | tr -d ' ')
